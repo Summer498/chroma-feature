@@ -1019,6 +1019,7 @@
   var meydaToggle = document.getElementById("meydaToggle");
   var softmaxToggle = document.getElementById("softmaxToggle");
   var fifthToggle = document.getElementById("fifthToggle");
+  var percToggle = document.getElementById("percToggle");
   var smoothSlider = document.getElementById("smoothSlider");
   function getSmoothRate() {
     return parseFloat(smoothSlider.value);
@@ -1032,34 +1033,46 @@
   function useMeyda() {
     return meydaToggle.checked;
   }
+  function usePercFilter() {
+    return percToggle.checked;
+  }
   var audioContext = null;
   var analyser = null;
   var stream = null;
   var animationId = null;
   var meydaAnalyzer = null;
   var lastChroma = null;
+  var HISTORY = 25;
+  var history = [];
+  function medianFilter(buf) {
+    console.log("median");
+    const mags = buf;
+    history.push(mags);
+    if (history.length > HISTORY) history.shift();
+    const out = new Uint8Array(mags.length);
+    for (let i = 0; i < mags.length; i++) {
+      const column = history.map((h) => h[i]).sort((a, b) => a - b);
+      out[i] = column[Math.floor(column.length / 2)];
+    }
+    return out;
+  }
   function freqToPitchClass(freq) {
-    if (freq < 50 || freq > 5e3) return null;
+    if (freq < 50 || freq > 2500) return null;
     const midi = Math.round(12 * Math.log2(freq / 440) + 69);
     return (midi % 12 + 12) % 12;
   }
   function accumulateChroma(freqBuffer, sampleRate) {
     const chroma = new Float32Array(12);
     const binWidth = sampleRate / (freqBuffer.length * 2);
-    let total = 0;
     for (let i = 0; i < freqBuffer.length; i++) {
-      const amp = freqBuffer[i] / 255;
+      const amp = 1 * freqBuffer[i] / 255;
       if (amp === 0) continue;
       const freq = i * binWidth;
       const pc = freqToPitchClass(freq);
       if (pc === null) continue;
       chroma[pc] += amp * amp;
-      total += amp * amp;
     }
-    if (total > 0) {
-      for (let i = 0; i < 12; i++) chroma[i] /= total;
-    }
-    return chroma.map((e) => Math.sqrt(e));
+    return chroma.map((e) => Math.sqrt(e)).map((e) => e / 3);
   }
   function softmax(vec) {
     const out = new Float32Array(12);
@@ -1141,7 +1154,8 @@
         const loop = () => {
           if (!analyser) return;
           analyser.getByteFrequencyData(freqBuffer);
-          drawChroma(accumulateChroma(freqBuffer, audioContext.sampleRate));
+          const mags = usePercFilter() ? medianFilter(freqBuffer) : freqBuffer;
+          drawChroma(accumulateChroma(mags, audioContext.sampleRate));
           animationId = requestAnimationFrame(loop);
         };
         loop();
@@ -1155,6 +1169,7 @@
   function stopCapture() {
     stopBtn.disabled = true;
     startBtn.disabled = false;
+    history.length = 0;
     if (animationId !== null) cancelAnimationFrame(animationId);
     if (meydaAnalyzer) {
       meydaAnalyzer.stop();
