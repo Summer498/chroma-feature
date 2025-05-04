@@ -1,0 +1,64 @@
+:root {
+  --bg: #101010;
+  --fg: #e0e0e0;
+  --panel: #1e1e1e;
+  --accent: #4caf50;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+}
+
+header {
+  background: var(--panel);
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+  flex: 1;
+}
+
+main {
+  height: calc(100% - 64px);
+  display: grid;
+  place-items: center;
+}
+
+#chromaCanvas {
+  width: min(90vmin, 600px);
+  height: min(90vmin, 600px);
+  background: #000;
+  border-radius: 8px;
+}
+
+button {
+  appearance: none;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+button[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.smoothSliderLabel {
+  margin:1em;
+}

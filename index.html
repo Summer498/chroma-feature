@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Chroma Vector Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <header>
+    <h1>Chroma Vector Viewer</h1>
+    <div class="controls">
+      <button id="startBtn">Start</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <label><input type="checkbox" id="meydaToggle" checked />CQT</label>
+      <label><input type="checkbox" id="fifthToggle" />Fifth</label>
+      <label><input type="checkbox" id="softmaxToggle" />Softmax</label>
+      <label class="smoothSliderLabel">Smooth<input type="range" id="smoothSlider" min="0" max="1" step="0.1" value="0.8" /></label>
+    </div>
+  </header>
+  <main>
+    <canvas id="chromaCanvas"></canvas>
+  </main>
+  <script type="module" src="dist/app.global.js"></script>
+</body>
+
+</html>
