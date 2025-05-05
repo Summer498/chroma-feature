@@ -37,6 +37,8 @@ const softmaxToggle = document.getElementById("softmaxToggle") as HTMLInputEleme
 const fifthToggle = document.getElementById("fifthToggle") as HTMLInputElement;
 const rankToggle = document.getElementById("rankToggle") as HTMLInputElement;
 const percToggle = document.getElementById('percToggle') as HTMLInputElement;
+const squareToggle = document.getElementById('squareToggle') as HTMLInputElement;
+const shepardToggle = document.getElementById('shepardToggle') as HTMLInputElement;
 const smoothSlider = document.getElementById("smoothSlider") as HTMLInputElement;
 
 
@@ -57,6 +59,12 @@ function useMeyda(): boolean {
 }
 function useRank(): boolean {
   return rankToggle.checked;
+}
+function useSquare(): boolean {
+  return squareToggle.checked;
+}
+function useShepard(): boolean {
+  return shepardToggle.checked;
 }
 function usePercFilter(): boolean {
   return percToggle.checked;
@@ -121,7 +129,7 @@ function rankVector(v: Float32Array): Float32Array {
   const idx = [...Array(12).keys()].sort((a, b) => v[b] - v[a]);
   const out = new Float32Array(12);
   idx.forEach((p, r) => { out[p] = Math.exp(-r); });
-//  idx.forEach((p, r) => { out[p] = 1 - r / 11; });
+  //  idx.forEach((p, r) => { out[p] = 1 - r / 11; });
   return out;
 }
 
@@ -135,7 +143,7 @@ function softmax(vec: Float32Array): Float32Array {
     sum += out[i];
   }
   for (let i = 0; i < 12; i++) out[i] /= sum;
-  return out.map(e=>e*5);
+  return out.map(e => e * 5);
 }
 
 function smoothChroma(src: Float32Array): Float32Array {
@@ -157,6 +165,102 @@ function preprocessChroma(raw: Float32Array): Float32Array {
   [0];
 }
 
+/*-------------------------------------------------------------*
+ * 1. いまのフレームで “1 位” のピッチクラスを返す
+ *-------------------------------------------------------------*/
+function topPitchClass(chroma: Float32Array): number {
+  let maxIdx = 0, maxVal = chroma[0];
+  for (let i = 1; i < 12; i++) if (chroma[i] > maxVal) {
+    maxVal = chroma[i]; maxIdx = i;
+  }
+  return maxIdx;          // 0=C, 1=C# … 11=B
+}
+
+/*───────────────────────────────────────────────*
+ * Shepard tone generator – 無限音階
+ *───────────────────────────────────────────────*/
+class ShepardTone {
+  private ctx = new AudioContext();
+  private gain = this.ctx.createGain();
+  private oscs: OscillatorNode[] = [];
+  private readonly octaves = [-3, -2, -1, 0, 1, 2, 3]; // 55Hz〜7kHz 付近
+  private readonly center = 440;                 // 振幅中心周波数
+  private readonly width = 1.5;                 // ガウス幅 (oct)
+  private currentPC = -1;
+
+  constructor() {
+    this.gain.gain.value = 0;
+    this.gain.connect(this.ctx.destination);
+  }
+
+  /** ピッチクラスを指定 (0=C … 11=B, -1=ミュート) */
+  play(pc: number): void {
+    if (!useShepard()) {
+      /* ←トグルが OFF のときは必ず音量 0 に */
+      this.gain.gain.setTargetAtTime(0, oscCtx.currentTime, 0.02);
+      prevPC = -1;                    // 状態もリセット
+      return;
+    }
+    if (pc === this.currentPC) return;
+    this.currentPC = pc;
+    /* 全オシレータを止める */
+    this.oscs.forEach(o => o.stop());
+    this.oscs.length = 0;
+    if (pc < 0) {
+      this.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+      return;
+    }
+    const f0 = 440 * Math.pow(2, (pc - 9) / 12); // A4=440基準
+    /* 新しい Shepard 音を生成 */
+    this.octaves.forEach(oct => {
+      const f = f0 * Math.pow(2, oct);
+      if (f < 20 || f > this.ctx.sampleRate / 2) return; // 可聴帯域のみ
+      const osc = this.ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      const g = this.ctx.createGain();
+      /* ガウス包絡で中央帯域が最も大きく: exp(-(log2(f/center))^2/width^2) */
+      const amp = Math.exp(-Math.pow(Math.log2(f / this.center) / this.width, 2));
+      g.gain.value = amp;
+      osc.connect(g).connect(this.gain);
+      osc.start();
+      this.oscs.push(osc);
+    });
+    /* 音量を滑らかに上げる */
+    this.gain.gain.setTargetAtTime(0.1, this.ctx.currentTime, 0.02);
+  }
+}
+const shepard = new ShepardTone();
+
+/*-------------------------------------------------------------*
+ * 2. 矩形波プレイヤ – 1 本だけ持って切替
+ *-------------------------------------------------------------*/
+const oscCtx = new AudioContext();            // 別 AudioContext
+const osc = oscCtx.createOscillator();
+osc.type = "square";
+const gain = oscCtx.createGain();
+gain.gain.value = 0;                          // 初期は無音
+osc.connect(gain).connect(oscCtx.destination);
+osc.start();
+
+let prevPC = -1;
+function playSquare(pc: number): void {
+  if (!useSquare()) {
+    /* ←トグルが OFF のときは必ず音量 0 に */
+    gain.gain.setTargetAtTime(0, oscCtx.currentTime, 0.02);
+    prevPC = -1;                    // 状態もリセット
+    return;
+  }
+  if (pc === prevPC) return;                  // 同じ音なら何もしない
+  prevPC = pc;
+
+  const pcToFreq = (p: number) =>
+    440 * Math.pow(2, (p - 9) / 12);          // 0=C4≈261.6Hz, 9=A4=440Hz基準
+  gain.gain.setTargetAtTime(0.1, oscCtx.currentTime, 0.01); // 音量 0.2
+  osc.frequency.setValueAtTime(pcToFreq(pc), oscCtx.currentTime);
+}
+
+
 /*****************************************************************************************
  * DRAWING
  *****************************************************************************************/
@@ -177,7 +281,13 @@ function drawChroma(rawChroma: Float32Array): void {
     ctx.textBaseline = "middle";
     ctx.fillText(PITCH_NAMES[idx], 8, y + barH / 2);
   }
+
+  const top = topPitchClass(chroma);
+  playSquare(top);
+  shepard.play(top);
 }
+
+
 
 /*****************************************************************************************
  * AUDIO CAPTURE & ANALYSIS SETUP

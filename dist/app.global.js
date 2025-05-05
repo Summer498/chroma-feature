@@ -1021,6 +1021,8 @@
   var fifthToggle = document.getElementById("fifthToggle");
   var rankToggle = document.getElementById("rankToggle");
   var percToggle = document.getElementById("percToggle");
+  var squareToggle = document.getElementById("squareToggle");
+  var shepardToggle = document.getElementById("shepardToggle");
   var smoothSlider = document.getElementById("smoothSlider");
   function getSmoothRate() {
     return parseFloat(smoothSlider.value);
@@ -1036,6 +1038,12 @@
   }
   function useRank() {
     return rankToggle.checked;
+  }
+  function useSquare() {
+    return squareToggle.checked;
+  }
+  function useShepard() {
+    return shepardToggle.checked;
   }
   function usePercFilter() {
     return percToggle.checked;
@@ -1111,6 +1119,82 @@
   function preprocessChroma(raw) {
     return [raw].map((e) => useRank() ? rankVector(e) : e).map((e) => isSoftmax() ? softmax(e) : e).map((e) => getSmoothRate() > 0 ? smoothChroma(e) : e)[0];
   }
+  function topPitchClass(chroma) {
+    let maxIdx = 0, maxVal = chroma[0];
+    for (let i = 1; i < 12; i++) if (chroma[i] > maxVal) {
+      maxVal = chroma[i];
+      maxIdx = i;
+    }
+    return maxIdx;
+  }
+  var ShepardTone = class {
+    ctx = new AudioContext();
+    gain = this.ctx.createGain();
+    oscs = [];
+    octaves = [-3, -2, -1, 0, 1, 2, 3];
+    // 55Hz〜7kHz 付近
+    center = 440;
+    // 振幅中心周波数
+    width = 1.5;
+    // ガウス幅 (oct)
+    currentPC = -1;
+    constructor() {
+      this.gain.gain.value = 0;
+      this.gain.connect(this.ctx.destination);
+    }
+    /** ピッチクラスを指定 (0=C … 11=B, -1=ミュート) */
+    play(pc) {
+      if (!useShepard()) {
+        this.gain.gain.setTargetAtTime(0, oscCtx.currentTime, 0.02);
+        prevPC = -1;
+        return;
+      }
+      if (pc === this.currentPC) return;
+      this.currentPC = pc;
+      this.oscs.forEach((o) => o.stop());
+      this.oscs.length = 0;
+      if (pc < 0) {
+        this.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+        return;
+      }
+      const f0 = 440 * Math.pow(2, (pc - 9) / 12);
+      this.octaves.forEach((oct) => {
+        const f = f0 * Math.pow(2, oct);
+        if (f < 20 || f > this.ctx.sampleRate / 2) return;
+        const osc2 = this.ctx.createOscillator();
+        osc2.type = "sine";
+        osc2.frequency.value = f;
+        const g = this.ctx.createGain();
+        const amp = Math.exp(-Math.pow(Math.log2(f / this.center) / this.width, 2));
+        g.gain.value = amp;
+        osc2.connect(g).connect(this.gain);
+        osc2.start();
+        this.oscs.push(osc2);
+      });
+      this.gain.gain.setTargetAtTime(0.1, this.ctx.currentTime, 0.02);
+    }
+  };
+  var shepard = new ShepardTone();
+  var oscCtx = new AudioContext();
+  var osc = oscCtx.createOscillator();
+  osc.type = "square";
+  var gain = oscCtx.createGain();
+  gain.gain.value = 0;
+  osc.connect(gain).connect(oscCtx.destination);
+  osc.start();
+  var prevPC = -1;
+  function playSquare(pc) {
+    if (!useSquare()) {
+      gain.gain.setTargetAtTime(0, oscCtx.currentTime, 0.02);
+      prevPC = -1;
+      return;
+    }
+    if (pc === prevPC) return;
+    prevPC = pc;
+    const pcToFreq = (p) => 440 * Math.pow(2, (p - 9) / 12);
+    gain.gain.setTargetAtTime(0.1, oscCtx.currentTime, 0.01);
+    osc.frequency.setValueAtTime(pcToFreq(pc), oscCtx.currentTime);
+  }
   function drawChroma(rawChroma) {
     const chroma = preprocessChroma(rawChroma);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1128,6 +1212,9 @@
       ctx.textBaseline = "middle";
       ctx.fillText(PITCH_NAMES[idx], 8, y + barH / 2);
     }
+    const top = topPitchClass(chroma);
+    playSquare(top);
+    shepard.play(top);
   }
   async function createDisplayAudioAnalyser() {
     const stream2 = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
