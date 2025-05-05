@@ -1019,6 +1019,7 @@
   var meydaToggle = document.getElementById("meydaToggle");
   var softmaxToggle = document.getElementById("softmaxToggle");
   var fifthToggle = document.getElementById("fifthToggle");
+  var rankToggle = document.getElementById("rankToggle");
   var percToggle = document.getElementById("percToggle");
   var smoothSlider = document.getElementById("smoothSlider");
   function getSmoothRate() {
@@ -1032,6 +1033,9 @@
   }
   function useMeyda() {
     return meydaToggle.checked;
+  }
+  function useRank() {
+    return rankToggle.checked;
   }
   function usePercFilter() {
     return percToggle.checked;
@@ -1074,6 +1078,14 @@
     }
     return chroma.map((e) => Math.sqrt(e)).map((e) => e / 3);
   }
+  function rankVector(v) {
+    const idx = [...Array(12).keys()].sort((a, b) => v[b] - v[a]);
+    const out = new Float32Array(12);
+    idx.forEach((p, r) => {
+      out[p] = 1 - r / 11;
+    });
+    return out;
+  }
   function softmax(vec) {
     const out = new Float32Array(12);
     let max = -Infinity;
@@ -1097,8 +1109,7 @@
     return lastChroma;
   }
   function preprocessChroma(raw) {
-    const withNorm = isSoftmax() ? softmax(raw) : raw;
-    return getSmoothRate() > 0 ? smoothChroma(withNorm) : withNorm;
+    return [raw].map((e) => useRank() ? rankVector(e) : e).map((e) => isSoftmax() ? softmax(e) : e).map((e) => getSmoothRate() > 0 ? smoothChroma(e) : e)[0];
   }
   function drawChroma(rawChroma) {
     const chroma = preprocessChroma(rawChroma);

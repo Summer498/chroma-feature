@@ -35,8 +35,10 @@ const PITCH_ORDERS = {
 const meydaToggle = document.getElementById("meydaToggle") as HTMLInputElement;
 const softmaxToggle = document.getElementById("softmaxToggle") as HTMLInputElement;
 const fifthToggle = document.getElementById("fifthToggle") as HTMLInputElement;
+const rankToggle = document.getElementById("rankToggle") as HTMLInputElement;
 const percToggle = document.getElementById('percToggle') as HTMLInputElement;
 const smoothSlider = document.getElementById("smoothSlider") as HTMLInputElement;
+
 
 /*****************************************************************************************
  * UTILITY FUNCTIONS
@@ -52,6 +54,9 @@ function orderMode(): keyof typeof PITCH_ORDERS {
 }
 function useMeyda(): boolean {
   return meydaToggle.checked;
+}
+function useRank(): boolean {
+  return rankToggle.checked;
 }
 function usePercFilter(): boolean {
   return percToggle.checked;
@@ -108,8 +113,15 @@ function accumulateChroma(freqBuffer: Uint8Array, sampleRate: number): Float32Ar
     if (pc === null) continue;
     chroma[pc] += amp * amp;
   }
-  
-  return chroma.map(e => Math.sqrt(e)).map(e=>e/3);
+
+  return chroma.map(e => Math.sqrt(e)).map(e => e / 3);
+}
+
+function rankVector(v: Float32Array): Float32Array {
+  const idx = [...Array(12).keys()].sort((a, b) => v[b] - v[a]);
+  const out = new Float32Array(12);
+  idx.forEach((p, r) => { out[p] = 1 - r / 11; });
+  return out;
 }
 
 function softmax(vec: Float32Array): Float32Array {
@@ -137,8 +149,11 @@ function smoothChroma(src: Float32Array): Float32Array {
 }
 
 function preprocessChroma(raw: Float32Array): Float32Array {
-  const withNorm = isSoftmax() ? softmax(raw) : raw;
-  return getSmoothRate() > 0 ? smoothChroma(withNorm) : withNorm;
+  return [raw]
+    .map(e => useRank() ? rankVector(e) : e)
+    .map(e => isSoftmax() ? softmax(e) : e)
+    .map(e => getSmoothRate() > 0 ? smoothChroma(e) : e)
+  [0];
 }
 
 /*****************************************************************************************
