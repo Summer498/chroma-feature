@@ -1082,7 +1082,7 @@
     const idx = [...Array(12).keys()].sort((a, b) => v[b] - v[a]);
     const out = new Float32Array(12);
     idx.forEach((p, r) => {
-      out[p] = 1 - r / 11;
+      out[p] = Math.exp(-r);
     });
     return out;
   }
@@ -1096,7 +1096,7 @@
       sum += out[i];
     }
     for (let i = 0; i < 12; i++) out[i] /= sum;
-    return out;
+    return out.map((e) => e * 5);
   }
   function smoothChroma(src) {
     if (lastChroma === null) {
